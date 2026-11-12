@@ -185,6 +185,10 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 .cheat p{margin:4px 0;font-size:14.5px}
 
 .loading{padding:30px;color:var(--ink3)}
+/* explanations */
+.understand{margin-top:12px;background:var(--keybg);border-radius:8px;padding:10px 14px;font-size:15px}
+.understand ul{margin:4px 0 0;padding-left:18px}.understand li{margin:3px 0}
+.why{font-size:14px;color:var(--ink2);margin:2px 0 8px}
 /* example boxes */
 .lbox{background:var(--sheet);border:1px solid var(--grid);border-radius:10px;overflow:hidden}
 .lpart{border-bottom:1px solid var(--grid)}.lpart:last-child{border:0}
@@ -499,14 +503,83 @@ function dataTable(r, hot){
   const rows = r.rows.map(row => '<tr>' + row.map((v, i) => `<td class="${hot.has(r.fields[i].name) ? 'hot' : ''}">${v === null ? '<span class="null">null</span>' : esc(v)}</td>`).join('') + '</tr>').join('');
   return `<table class="rs"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
+/* ---------- explain a reference query in plain words ---------- */
+const FEAT = [
+  [/\bCOUNT\(\*\)/i, 'COUNT(*) counts rows, NULLs included.'],
+  [/\bCOUNT\((?!\*)(?!DISTINCT)[^)]+\)/i, 'COUNT(column) only counts rows where that column is filled in.'],
+  [/\bCOUNT\(DISTINCT/i, 'COUNT(DISTINCT …) counts each different value once.'],
+  [/\bSUM\(/i, 'SUM adds the values up.'], [/\bAVG\(/i, 'AVG gives the average (NULLs are skipped).'],
+  [/\bMIN\(/i, 'MIN takes the smallest value (for dates: the oldest).'], [/\bMAX\(/i, 'MAX takes the biggest value (for dates: the most recent).'],
+  [/\bDISTINCT\b(?!\s*\w+\))/i, 'DISTINCT removes duplicate rows from the result.'],
+  [/\|\|/, '|| glues text together. If one part is NULL, the whole result becomes NULL.'],
+  [/\bCONCAT_WS\(/i, 'CONCAT_WS(separator, …) glues values with a separator and skips NULLs.'],
+  [/\bAS\s+"/i, 'An alias in "double quotes" keeps capitals and spaces in the header.'],
+  [/\bBETWEEN\b/i, 'BETWEEN low AND high includes both limits; the small value comes first.'],
+  [/\bLIKE\b/i, 'LIKE searches with a pattern: % = any number of characters, _ = exactly one.'],
+  [/\bNOT IN\b/i, 'NOT IN (…) keeps rows whose value is not in the list.'],
+  [/\b(?<!NOT )IN\s*\(/i, 'IN (…) is a short way to write several ORs.'],
+  [/\bIS NULL\b/i, 'IS NULL finds empty values. "= NULL" never works.'], [/\bIS NOT NULL\b/i, 'IS NOT NULL keeps only filled-in values.'],
+  [/\b(UPPER|LOWER)\(/i, 'UPPER/LOWER make the text comparison independent of capitals.'],
+  [/\bINITCAP\(/i, 'INITCAP writes the first letter of every word as a capital.'],
+  [/\bTO_CHAR\([^)]*'[^']*(DD|MM|YY|Month|Day)/i, 'TO_CHAR(date, mask) turns a date into text in the layout you want. FM removes padding spaces.'],
+  [/\bTO_CHAR\([^)]*'[^']*[90]/i, 'TO_CHAR(number, mask) formats a number: 9 = digit, 0 = forced digit, FM = no leading space.'],
+  [/\bage\(/i, 'age(date) gives the time between that date and today (years, months, days).'],
+  [/\bdate_part\(/i, "date_part('part', …) takes one piece out of a date: year, month, dow (day of week, Sunday = 0)…"],
+  [/\binterval\b/i, "interval '…' is an amount of time you can add to or compare with dates."],
+  [/current_date\s*-/i, 'date − date gives a number of days.'],
+  [/\bROUND\(/i, 'ROUND rounds; the second number is how many decimals.'], [/\bTRUNC\(/i, 'TRUNC cuts the decimals off without rounding.'],
+  [/\bMOD\(/i, 'MOD gives the remainder of a division.'],
+  [/\bSUBSTRING\(/i, 'SUBSTRING(text, start, length) takes a piece of the text.'], [/\bPOSITION\(/i, "POSITION('x' IN text) gives where x first appears (0 = not found)."],
+  [/\bLENGTH\(/i, 'LENGTH counts the characters, spaces included.'], [/\b[LR]PAD\(/i, 'LPAD/RPAD fill the text up to a length with a character.'],
+  [/\bREPLACE\(/i, 'REPLACE(text, old, new) swaps every occurrence.'], [/\bTRIM\(/i, 'TRIM removes characters at the start and/or end.'],
+  [/\bCAST\(|::/i, 'CAST converts a value to another type (here text → number).'],
+  [/\bUSING\s*\(/i, 'USING (column) joins on a column with the same name in both tables; write it without prefix.'],
+  [/\bLEFT JOIN\b/i, 'LEFT JOIN keeps every row of the left table, also when there is no match (the right side becomes NULL).'],
+  [/\bRIGHT JOIN\b/i, 'RIGHT JOIN keeps every row of the right table.'],
+  [/\bWITH TIES\b/i, 'WITH TIES also keeps the rows that are equal to the last one.'],
+  [/\bNULLS (FIRST|LAST)\b/i, 'NULLS FIRST/LAST decides where the empty values go in the sort.'],
+  [/\bFROM\s*\(\s*SELECT/i, 'A query in FROM (subquery) is calculated first; the outer query then works on its result.'],
+];
+const ALLCOLS = [...new Set(SCHEMA.enterprise.flatMap(t => t.cols.map(c => c.name)))];
+const colsIn = c => ALLCOLS.filter(n => new RegExp('\\b' + n + '\\b', 'i').test(c));
+function describeCol(t){
+  const bare = t.replace(/\s+AS\s+.*$/i, '').replace(/\s+"[^"]*"$/, '').trim();
+  if (/^[a-z_]+(\.[a-z_]+)?$/i.test(bare) || bare === '*') return `<code>${esc(bare === '*' ? 'all columns' : bare.replace(/^\w+\./, ''))}</code>`;
+  const used = colsIn(bare).map(n => `<code>${n}</code>`).join(', ');
+  const kind = /COUNT\(/i.test(bare) ? 'a count' : /SUM\(/i.test(bare) ? 'a total' : /AVG\(/i.test(bare) ? 'an average' : /MIN\(/i.test(bare) ? 'the smallest value' : /MAX\(/i.test(bare) ? 'the biggest value' : /TO_CHAR/i.test(bare) ? 'a formatted value' : /age\(|date_part|interval|current_date/i.test(bare) ? 'a date calculation' : /\|\||CONCAT/i.test(bare) ? 'glued-together text' : /UPPER|LOWER|INITCAP|SUBSTRING|POSITION|LENGTH|PAD|REPLACE|TRIM/i.test(bare) ? 'a text function' : /ROUND|TRUNC|MOD|[-+*/]/.test(bare) ? 'a calculation' : 'a calculated value';
+  return used ? `${kind} of ${used}` : kind;
+}
+function explain(sql){
+  const st = steps(sql), out = [];
+  const names = sql.match(/\b(FROM|JOIN)\s+([a-z_]+)(?:\s+(?!ON\b|USING\b|WHERE\b|JOIN\b|LEFT\b|RIGHT\b|FULL\b|INNER\b|GROUP\b|ORDER\b)([a-z]\w*))?/gi) || [];
+  const tbls = tablesIn(sql), selfJoin = names.length > tbls.length && tbls.length;
+  for (const x of st) {
+    const c = x.code, up = c.toUpperCase();
+    let plain = '', why = '';
+    if (x.label.startsWith('Take')) { plain = tbls.length ? `The data you need is in ${tbls.map(t => `<code>${t}</code>`).join(', ')}.` : 'No table is needed: you only calculate.'; why = tbls.length > 1 ? 'Every table you take a column from must be in FROM or a JOIN.' : 'FROM says which table to read.'; }
+    else if (x.label.startsWith('Link')) { plain = selfJoin ? 'You compare rows of the <b>same table</b> with each other, so the table is used twice with two nicknames (a self join).' : `The question needs columns from more than one table, so the tables are <b>joined</b>.`; why = 'ON (… = …) matches each row with the row in the other table that has the same id (foreign key = primary key).' + (/LEFT|RIGHT|FULL/.test(up) ? ' The question also wants the rows <b>without</b> a match, so it is an outer join.' : ''); }
+    else if (x.label.startsWith('Keep only the rows')) { { const cs = colsIn(c); plain = `The question doesn't want every row: only the ones that match a <b>condition</b>${cs.length ? ' on ' + cs.map(n => `<code>${n}</code>`).join(', ') : ''}.`; } why = 'WHERE filters single rows, before any grouping.'; }
+    else if (x.label.startsWith('Make one group')) { plain = `The question asks something <b>per</b> ${esc(c.replace(/^GROUP BY\s*/i, '').replace(/\b\w+\./g, ''))} ("for each …"), so you make one group per value.`; why = 'Every column in SELECT that is not inside COUNT/SUM/AVG/MIN/MAX must be in GROUP BY.'; }
+    else if (x.label.startsWith('Keep only the groups')) { plain = 'There is also a condition on a <b>total, count or average</b>, so it can only be checked after grouping.'; why = 'The condition uses COUNT/SUM/AVG, which only exist after grouping, so it goes in HAVING. WHERE can\'t use them.'; }
+    else if (x.label.startsWith('Show')) { const cols = c.replace(/^SELECT\s+/i, '').split(/,(?![^(]*\))/).map(t => t.trim()); plain = `The answer shows ${cols.length} column${cols.length > 1 ? 's' : ''}: ${cols.map(describeCol).join(', ')}.`; why = /COUNT|SUM|AVG|MIN|MAX/i.test(c) ? 'Aggregate functions turn many rows into one number (per group).' : 'SELECT picks the columns (and calculations) the question asks to see.'; }
+    else if (x.label.startsWith('Sort')) { { const cs = colsIn(c); plain = `The question wants the rows in a certain <b>order</b>${cs.length ? ' (by ' + cs.map(n => `<code>${n}</code>`).join(', ') + ')' : ''}.`; } why = 'ORDER BY sorts: ASC (default) small → big / A → Z, DESC big → small. With several columns, the next one decides when the first is equal.'; }
+    else if (x.label.startsWith('Skip')) { plain = 'Some rows at the top of the sorted list are skipped.'; why = 'OFFSET n ROWS skips n rows.'; }
+    else if (x.label.startsWith('Then')) { plain = 'Only the first few rows of the sorted list are wanted ("top 3", "the youngest").'; why = 'FETCH FIRST n ROWS ONLY cuts the list after n rows; always together with ORDER BY.'; }
+    out.push({ ...x, plain, why });
+  }
+  const notes = FEAT.filter(([re]) => re.test(sql)).map(([, t]) => t);
+  return { parts: out, notes };
+}
+
 function exercise(i){
   i = +i; const ex = EX[i]; if (!ex) return exercises();
   const list = exIdx(ex.s), k = list.findIndex(([, j]) => j === i), setName = SETS.find(s => s[0] === ex.s)[1];
-  const tbls = tablesIn(ex.sol), st = steps(ex.sol);
+  const tbls = tablesIn(ex.sol), st = steps(ex.sol), xp = explain(ex.sol);
   app.innerHTML = `<div class="exhead"><a href="#/exercises" class="small">All exercises</a><span class="num">${esc(setName)}, exercise ${k+1} of ${list.length}</span><a class="small" href="#/learn/${ex.s}">Read this chapter</a></div>
     <div class="dots" style="margin:12px 0">${list.map(([e, j], n) => `<a class="dot ${S.done[j] ? 'done' : ''} ${j === i ? 'cur' : ''}" href="#/ex/${j}">${n+1}</a>`).join('')}</div>
     <div class="exflow">
-      <section class="exbox"><div class="exn">1</div><div><h3>The question</h3><p class="exq" style="margin:4px 0 0">${ex.q}</p></div></section>
+      <section class="exbox"><div class="exn">1</div><div style="flex:1"><h3>The question</h3><p class="exq" style="margin:4px 0 0">${ex.q}</p>
+        <div class="understand"><b>What the question wants from you</b><ul>${xp.parts.map(p => `<li>${p.plain}</li>`).join('')}</ul></div></div></section>
       <section class="exbox"><div class="exn">2</div><div style="min-width:0;flex:1"><h3>The data you work with</h3><p class="small muted" style="margin:2px 0 10px">${tbls.length > 1 ? `You need ${tbls.length} tables: ${tbls.map(t => `<code>${t}</code>`).join(', ')}.` : tbls.length ? `Everything is in the table <code>${tbls[0]}</code>.` : 'No table needed.'} The columns you need are marked in yellow and shown first.</p><div id="xdata"></div></div></section>
       <section class="exbox"><div class="exn">3</div><div style="min-width:0;flex:1"><h3>What your query must return</h3><p class="small muted" style="margin:2px 0 10px">Your result must have these values${ex.ord ? ', in this order' : ''}. Your column names can be different.</p><div id="xtarget" class="console res" style="max-height:300px"></div></div></section>
       <section class="exbox"><div class="exn">4</div><div style="min-width:0;flex:1"><h3>Write your query</h3><div id="xc" style="margin-top:8px"></div>
@@ -526,12 +599,12 @@ function exercise(i){
     if (!c.ed.get().trim()) { fb.innerHTML = '<div class="verdict no">Write a query first.</div>'; return; }
     fb.innerHTML = '<div class="verdict">Checking…</div>';
     const r = await check(ex, c.ed.get());
-    if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches step 3.</div>${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
+    if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches step 3.</div>${xp.notes.length ? `<div class="expl"><b>Why this works</b><ul style="margin:4px 0 0;padding-left:18px">${xp.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
     else fb.innerHTML = `<div class="verdict no">${esc(r.msg)}</div>${r.mine && r.mine.fields ? `<p class="small muted">Your result (compare it with step 3):</p><div class="console res" style="max-height:240px">${table(r.mine)}</div>` : ''}`;
   };
   let shown = 0;
   const showSteps = () => {
-    $('#xsteps').innerHTML = `<ol class="steps">${st.slice(0, shown).map(x => `<li><b>${x.label}</b><pre class="code">${hl(x.code)}</pre></li>`).join('')}</ol>${ex.hint && shown >= 1 ? `<div class="expl">Tip: ${ex.hint}</div>` : ''}`;
+    $('#xsteps').innerHTML = `<ol class="steps">${xp.parts.slice(0, shown).map(x => `<li><b>${x.label}</b><pre class="code">${hl(x.code)}</pre><div class="why">Why: ${x.why}</div></li>`).join('')}</ol>${ex.hint && shown >= 1 ? `<div class="expl">Tip: ${ex.hint}</div>` : ''}${shown >= st.length && xp.notes.length ? `<div class="expl"><b>Good to know for this query</b><ul style="margin:4px 0 0;padding-left:18px">${xp.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''}`;
     $('#stp').textContent = shown < st.length ? (shown ? 'Next step' : 'Help me step by step') : 'All steps shown';
     $('#stp').disabled = shown >= st.length;
   };
@@ -613,7 +686,7 @@ function start(k){
     ${LEARN.map((un, ui) => `<h4>${ui + 1}. ${esc(un.title)}</h4>${un.steps.map((s2, si) => `<a href="#/start/${ui}.${si}" class="${ui + '.' + si === k ? 'on' : ''}"><span class="ck ${S.learn[ui + '.' + si] ? 'd' : ''}">${S.learn[ui + '.' + si] ? '✓' : ''}</span>${esc(s2.t)}</a>`).join('')}`).join('')}</nav>
     <article class="lstep"><div class="unit">Lesson ${st.ui + 1}: ${esc(u.title)}, step ${st.si + 1} of ${u.steps.length}</div><h1>${esc(st.t)}</h1><div class="x">${st.x}</div>
     ${st.ex ? `<p class="small muted" style="margin-bottom:6px">Example: see which data it reads, what the query says and what comes out. Change the query and run it again.</p><div id="lex"></div>` : ''}
-    <div class="yourturn"><h2>Your turn</h2>${st.task ? `<p class="exq" style="font-size:17.5px;margin:6px 0 12px">${st.task.q}</p><div id="ltask"></div><div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="lchk">Check</button>${st.task.hint ? '<button class="btn" id="lhint">Hint</button>' : ''}<button class="btn" id="lshow">Show answer</button></div>` : `<p class="exq" style="font-size:17.5px;margin:6px 0 4px">${esc(st.mcq.q)}</p><div id="lmcq">${shuffle(st.mcq.o.map((_, j) => j)).map(j => `<button class="opt" data-j="${j}">${esc(st.mcq.o[j])}</button>`).join('')}</div>`}
+    <div class="yourturn"><h2>Your turn</h2>${st.task ? `<p class="exq" style="font-size:17.5px;margin:6px 0 4px">${st.task.q}</p><div class="understand" style="margin-bottom:12px"><b>What the question wants from you</b><ul>${explain(st.task.sol).parts.map(p => `<li>${p.plain}</li>`).join('')}</ul></div><div id="ltask"></div><div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="lchk">Check</button>${st.task.hint ? '<button class="btn" id="lhint">Hint</button>' : ''}<button class="btn" id="lshow">Show answer</button></div>` : `<p class="exq" style="font-size:17.5px;margin:6px 0 4px">${esc(st.mcq.q)}</p><div id="lmcq">${shuffle(st.mcq.o.map((_, j) => j)).map(j => `<button class="opt" data-j="${j}">${esc(st.mcq.o[j])}</button>`).join('')}</div>`}
     <div id="lfb"></div></div>
     <div class="lnav">${n > 0 ? `<a class="btn" href="#/start/${LSTEPS[n - 1].key}">Back</a>` : ''}<span style="flex:1"></span>${n < LSTEPS.length - 1 ? `<a class="btn ${S.learn[st.key] ? 'pri' : ''}" id="lnext" href="#/start/${LSTEPS[n + 1].key}">${S.learn[st.key] ? 'Next step' : 'Skip'}</a>` : `<a class="btn pri" href="#/exercises">Go to the exercises</a>`}</div></article></div>`;
   if (st.ex) lessonBox($('#lex'), st.ex);
@@ -629,7 +702,7 @@ function start(k){
       else fb.innerHTML = `<div class="verdict no" style="margin-top:12px">${esc(r.msg)}</div>${r.ref ? `<p class="small muted">The result should look like this:</p><div class="console res" style="max-height:240px">${table(r.ref)}</div>` : ''}`;
     };
     if (st.task.hint) $('#lhint').onclick = () => { fb.innerHTML = `<div class="expl">Hint: ${st.task.hint}</div>`; };
-    $('#lshow').onclick = () => { fb.innerHTML = `<p class="small muted" style="margin-top:12px">One correct answer. Type it yourself in the box and press Check, that's how it sticks.</p><pre class="code">${hl(st.task.sol)}</pre>`; };
+    $('#lshow').onclick = () => { const xq = explain(st.task.sol); fb.innerHTML = `<p class="small muted" style="margin-top:12px">One correct answer, piece by piece. Type it yourself in the box and press Check, that's how it sticks.</p><ol class="steps">${xq.parts.map(x => `<li><b>${x.label}</b><pre class="code">${hl(x.code)}</pre><div class="why">Why: ${x.why}</div></li>`).join('')}</ol>`; };
   } else {
     let done = false;
     $$('#lmcq .opt').forEach(b => b.onclick = () => { if (done) return; const j = +b.dataset.j; if (j === st.mcq.a) { done = true; b.classList.add('ok'); pass(st.mcq.why ? 'Correct. ' + esc(st.mcq.why) : 'Correct.'); } else { b.classList.add('bad'); fb.innerHTML = '<div class="verdict no" style="margin-top:12px">Not this one. Read the explanation again and try another answer.</div>'; } });
