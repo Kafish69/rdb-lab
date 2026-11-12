@@ -1,0 +1,16 @@
+CHEAT = [
+ ("Execution order", "<pre>FROM → WHERE → GROUP BY → HAVING\n→ SELECT → ORDER BY → OFFSET / FETCH</pre><p>Alias from SELECT: allowed in ORDER BY, not in WHERE or HAVING.</p>"),
+ ("Keys and rules", "<p><b>PK</b> unique + never NULL. <b>FK</b> refers to a PK, sits on the * side. <b>UQ</b> alternative key. <b>NN</b> mandatory.</p><p>Key constraint, entity integrity (PK ≠ NULL), referential integrity (FK values ⊂ PK values).</p><p>Many-to-many → intermediate table with both FKs as composite PK.</p>"),
+ ("SQL groups", "<p>DQL SELECT · DML INSERT UPDATE DELETE · DDL CREATE ALTER DROP TRUNCATE · DCL GRANT REVOKE · TCL COMMIT ROLLBACK SAVEPOINT</p>"),
+ ("Select list", "<pre>SELECT DISTINCT a, b * 1.1 AS raise,\n  last_name || ' ' || first_name \"Full name\"\nFROM t;</pre><p>Numbers bare · text/dates 'single' · aliases \"double\" (else lowercased).</p>"),
+ ("WHERE", "<pre>WHERE x BETWEEN 10 AND 20      -- incl., low first\n  AND UPPER(name) LIKE '_A%'  -- % many, _ one\n  AND dept IN (1, 3)\n  AND manager_id IS NULL      -- never = NULL\n  AND (a = 1 OR b = 2)        -- AND before OR</pre>"),
+ ("ORDER BY and paging", "<pre>ORDER BY dept DESC, 2 ASC NULLS FIRST\nOFFSET 3 ROWS\nFETCH NEXT 4 ROWS ONLY      -- or WITH TIES</pre><p>NULL = largest: last in ASC, first in DESC.</p>"),
+ ("Conversion", "<pre>to_char(d, 'FMDay DD FMMonth YYYY')\nto_char(n, 'FM9990.00')\nto_date('20 Sep 2021', 'DD Mon YYYY')\nto_number('€2500', 'L9999')\nCAST(x AS INT)   x::int</pre><p>FM no padding · TM translated names · 9 optional digit · 0 forced digit.</p>"),
+ ("Numbers", "<pre>round(15251.675, 1)  → 15251.7\nround(15256.675, -1) → 15260\ntrunc(15251.675, 1)  → 15251.6\nmod(5, 3)            → 2</pre>"),
+ ("Dates", "<pre>current_date - birth_date      -- days (int)\nbirth_date + interval '65 years'\nage(birth_date)                -- interval\ndate_part('year', age(birth_date))\nEXTRACT(MONTH FROM d)\ndate_part('dow', d)  -- Sun 0..Sat 6\ndate_trunc('month', ts)</pre>"),
+ ("Text", "<pre>UPPER LOWER INITCAP LENGTH\nSUBSTRING(s, start, len)  POSITION('o' IN s)\nCONCAT(a, b)  CONCAT_WS(' ', a, b)\nLPAD(s, 10, '*')  RPAD(s, 10, '.')\nTRIM(LEADING 'z' FROM s)  REPLACE(s, 'e', 'o')</pre><p>'a' || NULL = NULL, CONCAT ignores NULL.</p>"),
+ ("Joins", "<pre>FROM employees e\nJOIN departments d ON (e.department_id = d.department_id)\nJOIN tasks t USING (employee_id)</pre><p>No condition = Cartesian product. NATURAL JOIN joins on every same-named column (dangerous). Prefix columns that exist in both tables.</p>"),
+ ("Self join", "<pre>FROM employees e\nJOIN employees boss ON (e.manager_id = boss.employee_id)\n-- pairs once: e1.id < e2.id</pre>"),
+ ("Aggregates", "<pre>COUNT(*) COUNT(col) COUNT(DISTINCT col)\nSUM AVG MIN MAX       -- ignore NULL\nSELECT dept, COUNT(*)\nFROM employees\nWHERE gender = 'F'      -- rows\nGROUP BY dept\nHAVING AVG(salary) > 30000;  -- groups</pre><p>Every non-aggregated column in SELECT goes in GROUP BY. Never an aggregate in WHERE.</p>"),
+ ("Outer joins", "<pre>FROM employees e\nLEFT JOIN family_members f ON (e.employee_id = f.employee_id)\nWHERE f.employee_id IS NULL   -- no match</pre><p>Test IS NULL on a PK / NOT NULL column. Count with COUNT(f.col), not COUNT(*). FULL JOIN keeps both sides.</p>"),
+]
