@@ -185,6 +185,9 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 .cheat p{margin:4px 0;font-size:14.5px}
 
 .loading{padding:30px;color:var(--ink3)}
+/* playground guide */
+.pguide{background:var(--sheet);border:1px solid var(--grid);border-left:4px solid var(--key);border-radius:10px;padding:14px 20px;max-width:900px;margin-top:10px}
+.pguide p,.pguide li{font-size:15.5px}.pguide ol{padding-left:20px;margin:6px 0}
 /* exercise flow */
 .exflow{display:flex;flex-direction:column;gap:14px;max-width:980px}
 .exbox{display:flex;gap:16px;background:var(--sheet);border:1px solid var(--grid);border-radius:10px;padding:16px 18px}
@@ -400,12 +403,25 @@ function learn(id){
 }
 
 function play(){
-  app.innerHTML = `<div class="play"><aside class="side"><div class="row" style="display:flex;gap:8px"><button class="btn sm" id="rst">Reset database</button></div><p class="small muted" style="margin:0">Changes here are kept until you reset. Click a table to see its rows.</p><div class="schema" id="sch"></div></aside><div><div id="pc"></div></div></div>`;
+  const TRY = [
+    ['See a whole table', 'SELECT *\nFROM employees;'],
+    ['Pick columns and filter', 'SELECT last_name, salary\nFROM employees\nWHERE salary > 30000\nORDER BY salary DESC;'],
+    ['Join two tables', 'SELECT e.last_name, d.department_name\nFROM employees e\nJOIN departments d ON (e.department_id = d.department_id);'],
+    ['Count per group', 'SELECT department_id, COUNT(*), ROUND(AVG(salary))\nFROM employees\nGROUP BY department_id;'],
+    ['Change data (then reset)', "UPDATE employees\nSET salary = salary + 1000\nWHERE last_name = 'Bock';\n\nSELECT last_name, salary FROM employees WHERE last_name = 'Bock';"],
+  ];
+  app.innerHTML = `<h1 style="font-size:40px">Playground</h1>
+    <div class="pguide"><p><b>Free practice space.</b> No question and no check here: type any SQL you want and press <b>Run</b> (or Ctrl + Enter) to see what it does. Use it to test an idea from the notes, try a query before an exercise, or look at what's in a table.</p>
+    <ol><li><b>Look at the data:</b> click a table name on the left to see all its rows.</li><li><b>Write a query</b> in the box, or start from one of the examples below.</li><li><b>Run it</b> and read the result under the box. A red message means there's an error: it tells you what's wrong.</li><li><b>Experiment:</b> change one thing (a column, a condition, the sort) and run again to see the difference.</li></ol>
+    <p class="small muted">You can even change data with INSERT, UPDATE or DELETE. Changes stay until you press <b>Reset database</b>, which puts back the original rows.</p>
+    <div class="chips" style="margin:10px 0 0">${TRY.map((t, n) => `<button class="chip" data-try="${n}">${t[0]}</button>`).join('')}</div></div>
+    <div class="play" style="margin-top:20px"><aside class="side"><button class="btn sm" id="rst" style="align-self:flex-start">Reset database</button><p class="small muted" style="margin:0">Tables. Click one to see its rows.</p><div class="schema" id="sch"></div></aside><div><div id="pc"></div></div></div>`;
   const draft = S.drafts.play || 'SELECT *\nFROM employees;';
   const c = consoleBox($('#pc'), { sql: draft, rollback: false });
   const drawSchema = () => { $('#sch').innerHTML = schemaHTML(c.db(), true); $$('#sch h4[data-t]').forEach(h => h.onclick = () => { c.ed.set(`SELECT *\nFROM ${h.dataset.t};`); c.go(); }); };
   drawSchema();
   c.ed.el.addEventListener('input', () => { S.drafts.play = c.ed.get(); save(); });
+  $$('[data-try]').forEach(bt => bt.onclick = () => { c.ed.set(TRY[+bt.dataset.try][1]); S.drafts.play = c.ed.get(); save(); c.go(); });
   $('#rst').onclick = async () => { $('#rst').textContent = 'Resetting…'; await resetDB(); $('#rst').textContent = 'Reset database'; c.out.innerHTML = '<div class="msg okm">The database is back to its original rows.</div>'; };
   startDB();
 }
