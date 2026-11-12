@@ -78,7 +78,7 @@ h1,h2,h3{font-family:var(--cond);line-height:1.15;letter-spacing:-.01em;margin:0
 table.rs{border-collapse:collapse;font:13px/1.45 var(--mono);width:max-content;min-width:100%}
 table.rs th{position:sticky;top:0;background:var(--sheet);text-align:left;font-weight:600;padding:6px 12px;border-bottom:2px solid var(--grid);white-space:nowrap}
 table.rs td{padding:5px 12px;border-bottom:1px solid var(--grid2);white-space:nowrap;max-width:340px;overflow:hidden;text-overflow:ellipsis}
-table.rs td.n{text-align:right}
+table.rs td.n{text-align:left}
 table.rs td .null{color:var(--ink3);font-style:italic}
 table.rs tr:hover td{background:var(--grid2)}
 .rcount{font-size:12px;color:var(--ink3);padding:6px 12px;border-top:1px solid var(--grid2)}
@@ -150,6 +150,7 @@ table.t td{padding:7px 10px;border-bottom:1px solid var(--grid2);vertical-align:
 
 /* exercises */
 .exhead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+@media (max-width:600px){.exbox{padding:12px;gap:10px}.exn{width:24px;height:24px;font-size:12px}}
 .exq{font-size:19px;margin:10px 0 16px;max-width:820px}
 .verdict{padding:10px 14px;font-weight:500;font-size:15px}
 .verdict.ok{background:var(--okbg);color:var(--ok)}
@@ -184,6 +185,15 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 .cheat p{margin:4px 0;font-size:14.5px}
 
 .loading{padding:30px;color:var(--ink3)}
+/* exercise flow */
+.exflow{display:flex;flex-direction:column;gap:14px;max-width:980px}
+.exbox{display:flex;gap:16px;background:var(--sheet);border:1px solid var(--grid);border-radius:10px;padding:16px 18px}
+.exbox h3{font:600 17px var(--sans)}
+.exn{flex:none;width:30px;height:30px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font:600 14px var(--mono)}
+.dtab{margin-bottom:12px}.dname{font:600 14px var(--mono);margin-bottom:4px}
+table.rs th.hot{background:var(--key);color:#102A43}
+table.rs td.hot{background:var(--keybg)}
+ol.steps{padding-left:20px;margin:6px 0}ol.steps li{margin-bottom:6px}ol.steps pre{margin:4px 0}
 /* learn */
 .lrn{display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px}
 .lmap{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;font-size:14px}
@@ -410,33 +420,67 @@ function exercises(set){
   const first = exIdx(set).find(([, i]) => !S.done[i]) || exIdx(set)[0];
   location.replace('#/ex/' + first[1]);
 }
+/* split a reference query into readable steps */
+const CL = [['select','SELECT','Show these columns'],['from','FROM','Take the rows from'],['join','JOIN','Link the other table(s)'],['where','WHERE','Keep only the rows where'],['group','GROUP BY','Make one group per'],['having','HAVING','Keep only the groups where'],['order','ORDER BY','Sort by'],['offset','OFFSET','Skip'],['fetch','FETCH','Then only take']];
+function steps(sql){
+  sql = sql.replace(/;\s*$/, '');
+  let depth = 0, cuts = [];
+  const re = /\(|\)|\b(SELECT|FROM|(?:LEFT |RIGHT |FULL |INNER )?JOIN|WHERE|GROUP BY|HAVING|ORDER BY|OFFSET|FETCH)\b/gi; let m;
+  while ((m = re.exec(sql))) { if (m[0] === '(') depth++; else if (m[0] === ')') depth--; else if (!depth) cuts.push([m.index, m[1].toUpperCase()]); }
+  const parts = cuts.map(([p, k], n) => ({ k, txt: sql.slice(p, n + 1 < cuts.length ? cuts[n + 1][0] : sql.length).trim() }));
+  const kind = k => /JOIN/.test(k) ? 'join' : k.split(' ')[0].toLowerCase();
+  const out = [];
+  for (const [id, , label] of CL.slice(1).concat([CL[0]]).sort((x, y) => ['from','join','where','group','having','select','order','offset','fetch'].indexOf(x[0]) - ['from','join','where','group','having','select','order','offset','fetch'].indexOf(y[0]))) {
+    const ps = parts.filter(p => kind(p.k) === id); if (ps.length) out.push({ label, code: ps.map(p => p.txt).join('\n') });
+  }
+  return out;
+}
+const tablesIn = sql => [...new Set([...sql.matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/gi)].map(m => m[1].toLowerCase()))].filter(t => SCHEMA.enterprise.some(x => x.name === t));
+function dataTable(r, hot){
+  const ord = r.fields.map((f, i) => i).sort((x, y) => (hot.has(r.fields[y].name) - hot.has(r.fields[x].name)) || x - y);
+  r = { fields: ord.map(i => r.fields[i]), rows: r.rows.map(row => ord.map(i => row[i])) };
+  const head = r.fields.map(f => `<th class="${hot.has(f.name) ? 'hot' : ''}">${esc(f.name)}</th>`).join('');
+  const rows = r.rows.map(row => '<tr>' + row.map((v, i) => `<td class="${hot.has(r.fields[i].name) ? 'hot' : ''}">${v === null ? '<span class="null">null</span>' : esc(v)}</td>`).join('') + '</tr>').join('');
+  return `<table class="rs"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
 function exercise(i){
   i = +i; const ex = EX[i]; if (!ex) return exercises();
   const list = exIdx(ex.s), k = list.findIndex(([, j]) => j === i), setName = SETS.find(s => s[0] === ex.s)[1];
-  app.innerHTML = `<div class="exhead"><a href="#/exercises" class="small">All exercises</a><span class="num">${esc(setName)}, exercise ${k+1} of ${list.length}</span></div>
+  const tbls = tablesIn(ex.sol), st = steps(ex.sol);
+  app.innerHTML = `<div class="exhead"><a href="#/exercises" class="small">All exercises</a><span class="num">${esc(setName)}, exercise ${k+1} of ${list.length}</span><a class="small" href="#/learn/${ex.s}">Read this chapter</a></div>
     <div class="dots" style="margin:12px 0">${list.map(([e, j], n) => `<a class="dot ${S.done[j] ? 'done' : ''} ${j === i ? 'cur' : ''}" href="#/ex/${j}">${n+1}</a>`).join('')}</div>
-    <div class="exgrid">
-    <div><p class="exq">${ex.q}</p><div id="xc"></div>
-      <div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="chk">Check</button>${ex.hint ? '<button class="btn" id="hnt">Hint</button>' : ''}<button class="btn" id="shw">Show answer</button><span class="sp" style="flex:1"></span>${k > 0 ? `<a class="btn" href="#/ex/${list[k-1][1]}">Previous</a>` : ''}${k < list.length - 1 ? `<a class="btn" href="#/ex/${list[k+1][1]}">Next</a>` : ''}</div>
-      <div id="fb"></div></div>
-    <aside><details ${innerWidth > 900 ? 'open' : ''}><summary>Tables</summary><div class="schema" style="grid-template-columns:1fr;margin:0">${schemaHTML(ex.db, true)}</div></details></aside></div>`;
-  const c = consoleBox($('#xc'), { sql: S.drafts[i] || '', db: ex.db });
-  $$('aside h4[data-t]').forEach(h => h.onclick = () => { const cur = c.ed.get(); c.ed.set(`SELECT *\nFROM ${h.dataset.t};`); c.go().then(() => { c.ed.set(cur); }); });
+    <div class="exflow">
+      <section class="exbox"><div class="exn">1</div><div><h3>The question</h3><p class="exq" style="margin:4px 0 0">${ex.q}</p></div></section>
+      <section class="exbox"><div class="exn">2</div><div style="min-width:0;flex:1"><h3>The data you work with</h3><p class="small muted" style="margin:2px 0 10px">${tbls.length > 1 ? `You need ${tbls.length} tables: ${tbls.map(t => `<code>${t}</code>`).join(', ')}.` : tbls.length ? `Everything is in the table <code>${tbls[0]}</code>.` : 'No table needed.'} The columns you need are marked in yellow and shown first.</p><div id="xdata"></div></div></section>
+      <section class="exbox"><div class="exn">3</div><div style="min-width:0;flex:1"><h3>What your query must return</h3><p class="small muted" style="margin:2px 0 10px">Your result must have these values${ex.ord ? ', in this order' : ''}. Your column names can be different.</p><div id="xtarget" class="console res" style="max-height:300px"></div></div></section>
+      <section class="exbox"><div class="exn">4</div><div style="min-width:0;flex:1"><h3>Write your query</h3><div id="xc" style="margin-top:8px"></div>
+        <div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="chk">Check</button><button class="btn" id="stp">Help me step by step</button><button class="btn" id="shw">Show answer</button><span class="sp" style="flex:1"></span>${k > 0 ? `<a class="btn" href="#/ex/${list[k-1][1]}">Previous</a>` : ''}${k < list.length - 1 ? `<a class="btn" href="#/ex/${list[k+1][1]}">Next</a>` : ''}</div>
+        <div id="xsteps"></div><div id="fb"></div></div></section>
+    </div>`;
+  (async () => {
+    const out = [];
+    for (const t of tbls) { try { const r = await run(`SELECT * FROM ${t}`, ex.db); const res = r.results[r.results.length - 1]; const hot = new Set(res.fields.map(f => f.name).filter(n => new RegExp('\\b' + n + '\\b', 'i').test(ex.sol))); out.push(`<div class="dtab"><div class="dname">${t} <span class="muted">${res.rows.length} rows</span></div><div class="console res" style="max-height:230px">${dataTable(res, hot)}</div></div>`); } catch(e) {} }
+    $('#xdata').innerHTML = out.join('') || '<p class="small muted">This one works without a table.</p>';
+    try { const r = await run(ex.sol, ex.db); $('#xtarget').innerHTML = table(r.results[r.results.length - 1]); } catch(e) {}
+  })();
+  const c = consoleBox($('#xc'), { sql: S.drafts[i] || '', db: ex.db, compact: true });
   c.ed.el.addEventListener('input', () => { S.drafts[i] = c.ed.get(); save(); });
-  c.ed.el.focus();
   const fb = $('#fb');
   $('#chk').onclick = async () => {
     if (!c.ed.get().trim()) { fb.innerHTML = '<div class="verdict no">Write a query first.</div>'; return; }
     fb.innerHTML = '<div class="verdict">Checking…</div>';
     const r = await check(ex, c.ed.get());
-    if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches the answer.</div>${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
-    else fb.innerHTML = `<div class="verdict no">${esc(r.msg)}</div>${r.ref ? `<p class="small muted">Expected result:</p><div class="console res" style="max-height:260px">${table(r.ref)}</div>` : ''}`;
+    if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches step 3.</div>${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
+    else fb.innerHTML = `<div class="verdict no">${esc(r.msg)}</div>${r.mine && r.mine.fields ? `<p class="small muted">Your result (compare it with step 3):</p><div class="console res" style="max-height:240px">${table(r.mine)}</div>` : ''}`;
   };
-  if (ex.hint) $('#hnt').onclick = () => { fb.innerHTML = `<div class="expl">${ex.hint}</div>`; };
-  $('#shw').onclick = async () => {
-    let res = ''; try { const r = await run(ex.sol, ex.db); res = table(r.results[r.results.length - 1]); } catch(e) {}
-    fb.innerHTML = `<div class="sol"><p class="small muted">One correct answer (other queries with the same result count too):</p><pre class="code">${hl(ex.sol)}</pre><div class="console res" style="max-height:260px">${res}</div></div>`;
+  let shown = 0;
+  const showSteps = () => {
+    $('#xsteps').innerHTML = `<ol class="steps">${st.slice(0, shown).map(x => `<li><b>${x.label}</b><pre class="code">${hl(x.code)}</pre></li>`).join('')}</ol>${ex.hint && shown >= 1 ? `<div class="expl">Tip: ${ex.hint}</div>` : ''}`;
+    $('#stp').textContent = shown < st.length ? (shown ? 'Next step' : 'Help me step by step') : 'All steps shown';
+    $('#stp').disabled = shown >= st.length;
   };
+  $('#stp').onclick = () => { shown++; showSteps(); };
+  $('#shw').onclick = () => { shown = st.length; showSteps(); fb.innerHTML = `<p class="small muted">The whole query (other queries with the same result count too):</p><pre class="code">${hl(ex.sol)}</pre>`; };
 }
 
 /* ---------- quiz ---------- */

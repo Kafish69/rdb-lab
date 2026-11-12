@@ -55,7 +55,7 @@ X(S,"Show the remainder of each parking spot number divided by 2 (MOD), next to 
 # ---------- joins (chapter 4)
 S='joins'
 X(S,"Show each employee's last name with the name of the department they work in.","SELECT e.last_name, d.department_name FROM employees e JOIN departments d ON (e.department_id = d.department_id);")
-X(S,"Same, but only for the department Production, sorted by last name.","SELECT e.last_name, d.department_name FROM employees e JOIN departments d ON (e.department_id = d.department_id) WHERE d.department_name = 'Production' ORDER BY e.last_name;")
+X(S,"Show each employee's last name with their department name, only for the department Production, sorted by last name.","SELECT e.last_name, d.department_name FROM employees e JOIN departments d ON (e.department_id = d.department_id) WHERE d.department_name = 'Production' ORDER BY e.last_name;")
 X(S,"Show each employee's last name and department name, joining with USING.","SELECT last_name, department_name FROM employees JOIN departments USING (department_id);","With USING, write department_id without prefix.")
 X(S,"Show each department name with the last name of the employee who manages it.","SELECT d.department_name, e.last_name FROM departments d JOIN employees e ON (d.manager_id = e.employee_id);","departments.manager_id points to employees.employee_id.")
 X(S,"Show each department name with all its locations.","SELECT d.department_name, l.location FROM departments d JOIN locations l ON (d.department_id = l.department_id);")
