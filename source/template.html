@@ -185,6 +185,16 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 .cheat p{margin:4px 0;font-size:14.5px}
 
 .loading{padding:30px;color:var(--ink3)}
+/* example boxes */
+.lbox{background:var(--sheet);border:1px solid var(--grid);border-radius:10px;overflow:hidden}
+.lpart{border-bottom:1px solid var(--grid)}.lpart:last-child{border:0}
+.lh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:var(--grid2);font-size:14px}
+.lh .sp{flex:1}
+.doc .lh b,.lstep .lh b{background:none}
+.ln{width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--paper);display:grid;place-items:center;font:600 11px var(--mono)}
+.ldata{padding:8px 12px 2px}
+.lbox .res{border-top:0;max-height:300px}
+.lbox .cbar{border-top:1px solid var(--grid2)}
 /* playground guide */
 .pguide{background:var(--sheet);border:1px solid var(--grid);border-left:4px solid var(--key);border-radius:10px;padding:14px 20px;max-width:900px;margin-top:10px}
 .pguide p,.pguide li{font-size:15.5px}.pguide ol{padding-left:20px;margin:6px 0}
@@ -337,6 +347,36 @@ function consoleBox(box, {sql='', db='enterprise', rollback=true, dbPick=false, 
   return { ed, go, out, db: () => sel ? sel.value : db, setDb: v => { if (sel) sel.value = v; } };
 }
 
+/* ---------- example box for notes and lessons: data → query → result ---------- */
+const lazy = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { lazy.unobserve(e.target); e.target.__load && e.target.__load(); } }), { rootMargin: '300px' });
+function lessonBox(box, sql, db = 'enterprise'){
+  box.innerHTML = `<div class="lbox">
+    <div class="lpart"><div class="lh"><span class="ln">1</span><b>The data it reads</b><span class="from small muted"></span><span class="sp"></span><button class="btn sm tg1">Hide</button></div><div class="ldata"><p class="small muted">Loading the tables…</p></div></div>
+    <div class="lpart"><div class="lh"><span class="ln">2</span><b>The query</b><span class="small muted">change anything and press Run</span><span class="sp"></span><button class="btn sm orig">Original query</button></div><div class="edw"></div><div class="cbar"><button class="btn pri sm go">Run</button><span class="hint">Ctrl + Enter</span></div></div>
+    <div class="lpart"><div class="lh"><span class="ln">3</span><b>The result</b><span class="rsum small muted"></span></div><div class="res"><div class="msg okm">Press Run.</div></div></div></div>`;
+  const out = $('.res', box), dataEl = $('.ldata', box);
+  const showData = async q => {
+    const tbls = tablesIn(q);
+    $('.from', box).innerHTML = tbls.length ? 'from ' + tbls.map(t => `<code>${t}</code>`).join(' + ') + '. Yellow = columns the query uses.' : '';
+    if (!tbls.length) { dataEl.innerHTML = '<p class="small muted" style="margin:4px 0">This query doesn\'t read a table: it only calculates.</p>'; return; }
+    const html = [];
+    for (const t of tbls) { try { const r = await run(`SELECT * FROM ${t}`, db); const res = r.results[r.results.length - 1]; const hot = new Set(res.fields.map(f => f.name).filter(n => new RegExp('\\b' + n + '\\b', 'i').test(q))); html.push(`<div class="dtab"><div class="dname">${t} <span class="muted">${res.rows.length} rows</span></div><div class="console res" style="max-height:200px">${dataTable(res, hot)}</div></div>`); } catch(e) {} }
+    dataEl.innerHTML = html.join('');
+  };
+  const go = async () => {
+    const q = ed.get(); showData(q);
+    out.innerHTML = '<div class="msg okm">Running…</div>';
+    try { const { results } = await run(q, db, true); const r = results[results.length - 1]; out.innerHTML = r ? table(r) : '<div class="msg okm">No statement.</div>'; $('.rsum', box).textContent = r && r.rows ? `${r.rows.length} row${r.rows.length === 1 ? '' : 's'} came out` : ''; }
+    catch(e) { out.innerHTML = errMsg(e); $('.rsum', box).textContent = ''; }
+  };
+  const ed = editor($('.edw', box), sql, go, 0);
+  $('.go', box).onclick = go;
+  $('.orig', box).onclick = () => { ed.set(sql); go(); };
+  $('.tg1', box).onclick = () => { const h = dataEl.hidden = !dataEl.hidden; $('.tg1', box).textContent = h ? 'Show' : 'Hide'; };
+  box.__load = go; lazy.observe(box);
+  return { ed, go };
+}
+
 /* ---------- schema cards ---------- */
 function schemaHTML(db, clickable){
   return SCHEMA[db].map(t => `<div class="tb"><h4 ${clickable ? `data-t="${t.name}" title="Show rows"` : ''}>${t.name}<span>${t.rows} rows</span></h4>${t.cols.map(c => `<div class="${c.pk ? 'pk' : ''}">${c.name}${c.pk ? ' <span class="tg p">PK</span>' : ''}${c.fk ? ` <span class="tg f" title="→ ${c.fk}">FK</span>` : ''}${c.nn && !c.pk ? ' <span class="tg" style="color:var(--ink3)">NN</span>' : ''}<span class="ty">${c.type}</span></div>`).join('')}</div>`).join('');
@@ -397,7 +437,7 @@ function learn(id){
   app.innerHTML = `<div class="lay"><aside class="toc">${NOTES.map(n => `<a href="#/learn/${n.id}" class="${n.id === id ? 'on' : ''}"><span class="wk">${esc(n.week)}</span>${esc(n.title)}</a>`).join('')}</aside>
     <article class="doc"><div class="eyebrow">${esc(c.week)}</div><h1>${esc(c.title)}</h1>${c.html}
     <div class="pager">${i > 0 ? `<a href="#/learn/${NOTES[i-1].id}">Previous<b>${esc(NOTES[i-1].title)}</b></a>` : '<span></span>'}${i < NOTES.length - 1 ? `<a href="#/learn/${NOTES[i+1].id}" style="text-align:right">Next<b>${esc(NOTES[i+1].title)}</b></a>` : `<a href="#/exercises" style="text-align:right">Next<b>Exercises</b></a>`}</div></article></div>`;
-  $$('.runbox', app).forEach(b => consoleBox(b, { sql: b.dataset.sql, db: b.dataset.db, compact: true }));
+  $$('.runbox', app).forEach(b => lessonBox(b, b.dataset.sql, b.dataset.db));
   $$('.schema', app).forEach(s => s.innerHTML = schemaHTML(s.dataset.db));
   startDB();
 }
@@ -572,11 +612,11 @@ function start(k){
   app.innerHTML = `<div class="lrn"><nav class="lmap" aria-label="Lessons"><div class="small muted">${doneN} of ${LSTEPS.length} steps done</div>
     ${LEARN.map((un, ui) => `<h4>${ui + 1}. ${esc(un.title)}</h4>${un.steps.map((s2, si) => `<a href="#/start/${ui}.${si}" class="${ui + '.' + si === k ? 'on' : ''}"><span class="ck ${S.learn[ui + '.' + si] ? 'd' : ''}">${S.learn[ui + '.' + si] ? '✓' : ''}</span>${esc(s2.t)}</a>`).join('')}`).join('')}</nav>
     <article class="lstep"><div class="unit">Lesson ${st.ui + 1}: ${esc(u.title)}, step ${st.si + 1} of ${u.steps.length}</div><h1>${esc(st.t)}</h1><div class="x">${st.x}</div>
-    ${st.ex ? `<p class="small muted" style="margin-bottom:6px">Example. Press Run, change something, run it again.</p><div id="lex"></div>` : ''}
+    ${st.ex ? `<p class="small muted" style="margin-bottom:6px">Example: see which data it reads, what the query says and what comes out. Change the query and run it again.</p><div id="lex"></div>` : ''}
     <div class="yourturn"><h2>Your turn</h2>${st.task ? `<p class="exq" style="font-size:17.5px;margin:6px 0 12px">${st.task.q}</p><div id="ltask"></div><div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="lchk">Check</button>${st.task.hint ? '<button class="btn" id="lhint">Hint</button>' : ''}<button class="btn" id="lshow">Show answer</button></div>` : `<p class="exq" style="font-size:17.5px;margin:6px 0 4px">${esc(st.mcq.q)}</p><div id="lmcq">${shuffle(st.mcq.o.map((_, j) => j)).map(j => `<button class="opt" data-j="${j}">${esc(st.mcq.o[j])}</button>`).join('')}</div>`}
     <div id="lfb"></div></div>
     <div class="lnav">${n > 0 ? `<a class="btn" href="#/start/${LSTEPS[n - 1].key}">Back</a>` : ''}<span style="flex:1"></span>${n < LSTEPS.length - 1 ? `<a class="btn ${S.learn[st.key] ? 'pri' : ''}" id="lnext" href="#/start/${LSTEPS[n + 1].key}">${S.learn[st.key] ? 'Next step' : 'Skip'}</a>` : `<a class="btn pri" href="#/exercises">Go to the exercises</a>`}</div></article></div>`;
-  if (st.ex) consoleBox($('#lex'), { sql: st.ex, compact: true });
+  if (st.ex) lessonBox($('#lex'), st.ex);
   const fb = $('#lfb');
   const pass = msg => { const first = !S.learn[st.key]; S.learn[st.key] = 1; save(); fb.innerHTML = `<div class="verdict ok" style="margin-top:12px">${msg}</div>`; const nx = $('#lnext'); if (nx) { nx.classList.add('pri'); nx.textContent = 'Next step'; nx.focus(); } $$('.lmap a.on .ck').forEach(c => { c.classList.add('d'); c.textContent = '✓'; }); };
   if (st.task) {
