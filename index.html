@@ -258,7 +258,7 @@ function track(kind, ref = null, extra = {}){
 function gate(){
   if (S.name || location.hash.startsWith('#/admin')) return;
   const g = document.createElement('div'); g.className = 'gate';
-  g.innerHTML = `<form><h2>Welcome to rdb.lab</h2><p>Type your name once to start. It's saved on this device.</p><label for="nm" class="small">Your name</label><input id="nm" autocomplete="name" maxlength="60" required placeholder="First and last name"><p class="small">Your name, progress, quiz and mock exam scores are shared with the person who runs this site, so they can follow how the group is doing.</p><button class="btn pri" style="width:100%;justify-content:center;margin-top:8px">Start learning</button></form>`;
+  g.innerHTML = `<form><h2>Welcome to rdb.lab</h2><p>Type your name once to start.</p><label for="nm" class="small">Your name</label><input id="nm" autocomplete="name" maxlength="60" required placeholder="First and last name"><p class="small">Your name and progress are saved online.</p><button class="btn pri" style="width:100%;justify-content:center;margin-top:8px">Start learning</button></form>`;
   document.body.append(g); $('#nm', g).focus();
   $('form', g).onsubmit = e => {
     e.preventDefault(); const n = $('#nm', g).value.trim().replace(/\s+/g, ' '); if (!n) return;
