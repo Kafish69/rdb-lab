@@ -184,8 +184,37 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 .cheat p{margin:4px 0;font-size:14.5px}
 
 .loading{padding:30px;color:var(--ink3)}
+/* learn */
+.lrn{display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px}
+.lmap{position:sticky;top:76px;align-self:start;max-height:calc(100vh - 96px);overflow:auto;font-size:14px}
+.lmap h4{font:600 13px var(--sans);color:var(--ink3);margin:14px 0 4px}
+.lmap a{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:5px;text-decoration:none;color:var(--ink2)}
+.lmap a:hover{background:var(--grid2)}
+.lmap a.on{background:var(--sheet);color:var(--ink);font-weight:600;box-shadow:inset 0 0 0 1px var(--grid)}
+.lmap .ck{flex:none;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--grid);display:grid;place-items:center;font-size:10px;color:#fff}
+.lmap .ck.d{background:var(--ok);border-color:var(--ok)}
+.lstep{max-width:780px}
+.lstep .unit{font:500 14px var(--mono);color:var(--ink3)}
+.lstep h1{font-size:40px;margin:4px 0 14px}
+.lstep .x p{font-size:17.5px}
+.lstep .x b{font-weight:600;background:linear-gradient(transparent 62%,var(--keybg) 62%)}
+.yourturn{margin-top:28px;border-top:2px solid var(--key);padding-top:14px}
+.yourturn h2{font-size:22px;margin-bottom:6px}
+.lnav{display:flex;gap:10px;margin-top:26px;align-items:center}
+/* name gate */
+.gate{position:fixed;inset:0;z-index:50;background:color-mix(in srgb,var(--ink) 55%,transparent);display:grid;place-items:center;padding:20px}
+.gate form{background:var(--sheet);border-radius:12px;padding:28px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(16,42,67,.3)}
+.gate h2{font-size:30px;margin-bottom:6px}
+.gate input{width:100%;font:inherit;font-size:18px;padding:10px 12px;border:1px solid var(--grid);border-radius:8px;background:var(--paper);color:var(--ink);margin:14px 0 6px}
+.gate .small{color:var(--ink3)}
+/* admin */
+.adm table.set td{font-size:14px}
+.adm .kpis{display:flex;gap:28px;flex-wrap:wrap;margin:16px 0 26px}
+.adm .kpis div{font:600 30px var(--cond)}.adm .kpis span{display:block;font:400 13px var(--sans);color:var(--ink3)}
+.who{font-size:13px;color:var(--ink3);white-space:nowrap}
 @media (max-width:900px){
-  .hero,.grid2,.lay,.play,.exgrid{grid-template-columns:1fr}
+  .hero,.grid2,.lay,.play,.exgrid,.lrn{grid-template-columns:1fr}
+  .lmap{position:static;max-height:220px}
   .toc{position:static;display:flex;overflow-x:auto;gap:4px}
   .toc a{border-left:0;border-bottom:2px solid var(--grid);white-space:nowrap}
   .toc .wk{display:none}
@@ -204,6 +233,7 @@ pre.code{font:13.5px/1.55 var(--mono);background:var(--grid2);border-radius:8px;
 <main class="wrap" id="app"></main>
 <script type="module">
 const DATA = __DATA__;
+const LEARN = DATA.learn, CFG = DATA.cfg || {};
 const NOTES = DATA.notes, EX = DATA.ex, QZ = DATA.qz, SCHEMA = DATA.schema, SEED = DATA.seed, CHEAT = DATA.cheat;
 const $ = (s, r=document) => r.querySelector(s), $$ = (s, r=document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -213,11 +243,30 @@ const shuffle = a => { a = [...a]; for (let i = a.length-1; i > 0; i--) { const 
 /* ---------- storage ---------- */
 const KEY = 'rdblab.v1';
 let S = {}; try { S = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
-S.done = S.done || {}; S.drafts = S.drafts || {}; S.quiz = S.quiz || {}; S.mock = S.mock || [];
+S.done = S.done || {}; S.learn = S.learn || {}; S.drafts = S.drafts || {}; S.quiz = S.quiz || {}; S.mock = S.mock || [];
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
 try { if (S.theme) document.documentElement.dataset.theme = S.theme; } catch(e) {}
 $('#theme').onclick = () => { const d = document.documentElement.dataset.theme === 'dark' ? '' : 'dark'; document.documentElement.dataset.theme = d; S.theme = d; save(); $('#theme').textContent = d ? 'light' : 'dark'; };
 $('#theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+
+/* ---------- name + progress reporting ---------- */
+const api = (path, body) => CFG.url ? fetch(CFG.url + '/rest/v1/' + path, { method: 'POST', keepalive: true, headers: { apikey: CFG.key, Authorization: 'Bearer ' + CFG.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(body) }) : Promise.resolve(null);
+function track(kind, ref = null, extra = {}){
+  if (!S.uid || !CFG.url) return;
+  api('events', { student_id: S.uid, kind, ref: ref == null ? null : String(ref), ok: extra.ok ?? null, score: extra.score ?? null, total: extra.total ?? null, detail: extra.detail ?? null }).catch(() => {});
+}
+function gate(){
+  if (S.name || location.hash.startsWith('#/admin')) return;
+  const g = document.createElement('div'); g.className = 'gate';
+  g.innerHTML = `<form><h2>Welcome to rdb.lab</h2><p>Type your name once to start. It's saved on this device.</p><label for="nm" class="small">Your name</label><input id="nm" autocomplete="name" maxlength="60" required placeholder="First and last name"><p class="small">Your name, progress, quiz and mock exam scores are shared with the person who runs this site, so they can follow how the group is doing.</p><button class="btn pri" style="width:100%;justify-content:center;margin-top:8px">Start learning</button></form>`;
+  document.body.append(g); $('#nm', g).focus();
+  $('form', g).onsubmit = e => {
+    e.preventDefault(); const n = $('#nm', g).value.trim().replace(/\s+/g, ' '); if (!n) return;
+    S.name = n; S.uid = (crypto.randomUUID ? crypto.randomUUID() : 'u' + Date.now() + Math.random().toString(16).slice(2)); save();
+    api('students', { id: S.uid, name: n }).then(() => track('join')).catch(() => {});
+    g.remove(); route();
+  };
+}
 
 /* ---------- PostgreSQL in the browser ---------- */
 let pg = null, pgReady = null;
@@ -328,7 +377,7 @@ async function check(ex, userSql){
 }
 
 /* ---------- nav & router ---------- */
-const TABS = [['','Home'],['learn','Notes'],['play','Playground'],['exercises','Exercises'],['quiz','Quiz'],['mock','Mock exam'],['cheat','Cheat sheet']];
+const TABS = [['','Home'],['start','Learn'],['learn','Notes'],['play','Playground'],['exercises','Exercises'],['quiz','Quiz'],['mock','Mock exam'],['cheat','Cheat sheet']];
 function nav(r){ $('#nav').innerHTML = TABS.map(([h, t]) => `<a href="#/${h}" class="${r === h ? 'on' : ''}">${t}</a>`).join(''); }
 const SETS = [['w2','Week 2: one table'],['w3','Week 3: functions'],['w4','Week 4: joins'],['w5','Week 5: group by and having'],['w5o','Week 5: outer joins'],['nf','Netflix database']];
 const exIdx = s => EX.map((e, i) => [e, i]).filter(([e]) => e.s === s);
@@ -338,7 +387,7 @@ function home(){
   app.innerHTML = `<section class="hero">
     <div><h1>Ask the database.</h1>
       <p>Relational Database Fundamentals, term 1, with a real PostgreSQL running in this page. Read, run every example, and practise until the queries write themselves.</p>
-      <div class="ctas"><a class="btn pri" href="#/learn/intro">Start with week 1</a><a class="btn" href="#/exercises">Practise queries</a></div></div>
+      <div class="ctas"><a class="btn pri" href="#/start">Learn from zero</a><a class="btn" href="#/learn/intro">Read the notes</a><a class="btn" href="#/exercises">Practise queries</a></div></div>
     <div id="heroc"></div></section>
   <section class="sec"><h2>The course</h2><p class="sub">Six chapters and an exam guide. Every SQL block inside them runs.</p>
     <table class="set"><thead><tr><th>week</th><th>chapter</th><th class="hide-s">covers</th></tr></thead><tbody>
@@ -409,7 +458,7 @@ function exercise(i){
     if (!c.ed.get().trim()) { fb.innerHTML = '<div class="verdict no">Write a query first.</div>'; return; }
     fb.innerHTML = '<div class="verdict">Checking…</div>';
     const r = await check(ex, c.ed.get());
-    if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches the answer.</div>${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
+    track('exercise', i, { ok: r.ok }); if (r.ok) { S.done[i] = 1; save(); fb.innerHTML = `<div class="verdict ok">Correct. Your result matches the answer.</div>${k < list.length - 1 ? `<p><a class="btn pri" href="#/ex/${list[k+1][1]}">Next exercise</a></p>` : ''}`; $$('.dot.cur').forEach(d => d.classList.add('done')); }
     else fb.innerHTML = `<div class="verdict no">${esc(r.msg)}</div>${r.ref ? `<p class="small muted">Expected result:</p><div class="console res" style="max-height:260px">${table(r.ref)}</div>` : ''}`;
   };
   if (ex.hint) $('#hnt').onclick = () => { fb.innerHTML = `<div class="expl">${ex.hint}</div>`; };
@@ -435,7 +484,7 @@ function quiz(){
     return;
   }
   if (QS.i >= QS.qs.length) {
-    const pct = Math.round(100 * QS.ok / QS.qs.length); S.quiz[QS.cat] = Math.max(S.quiz[QS.cat] || 0, pct); save();
+    const pct = Math.round(100 * QS.ok / QS.qs.length); S.quiz[QS.cat] = Math.max(S.quiz[QS.cat] || 0, pct); save(); if (!QS.sent) { QS.sent = 1; track('quiz', QS.cat, { score: QS.ok, total: QS.qs.length }); }
     app.innerHTML = `<div class="qcard"><h3>${QS.ok} of ${QS.qs.length} correct (${pct}%)</h3><p class="muted">${pct >= 80 ? 'Solid. Try the exercises next.' : 'Read the chapter again and retry.'}</p><button class="btn pri" id="again">New round</button></div>`;
     $('#again').onclick = () => { QS = null; quiz(); }; return;
   }
@@ -473,7 +522,7 @@ function mock(){
   $$('.mk').forEach(b => { const id = b.dataset.id; const c = consoleBox(b, { sql: MK.ans[id] || '', db: 'netflix' }); c.ed.el.addEventListener('input', () => { MK.ans[id] = c.ed.get(); }); });
   const tick = () => { const left = Math.max(0, MK.end - Date.now()); const el = $('#clock'); if (!el) return clearInterval(tm); el.textContent = `${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} left`; if (!left) { clearInterval(tm); handIn(); } };
   const tm = setInterval(tick, 1000); tick();
-  const handIn = async () => { clearInterval(tm); app.insertAdjacentHTML('afterbegin', '<div class="verdict">Checking your answers…</div>'); MK.res = {}; for (const id of MK.ids) MK.res[id] = MK.ans[id] && MK.ans[id].trim() ? await check(EX[id], MK.ans[id]) : { ok: false, msg: 'No answer.' }; MK.done = true; const s = Object.values(MK.res).filter(r => r.ok).length; S.mock.push({ s, n: MK.ids.length, t: Date.now() }); save(); mockResult(); scrollTo(0, 0); };
+  const handIn = async () => { clearInterval(tm); app.insertAdjacentHTML('afterbegin', '<div class="verdict">Checking your answers…</div>'); MK.res = {}; for (const id of MK.ids) MK.res[id] = MK.ans[id] && MK.ans[id].trim() ? await check(EX[id], MK.ans[id]) : { ok: false, msg: 'No answer.' }; MK.done = true; const s = Object.values(MK.res).filter(r => r.ok).length; S.mock.push({ s, n: MK.ids.length, t: Date.now() }); save(); track('mock', null, { score: s, total: MK.ids.length, detail: MK.ids.map(id => ({ q: id, ok: MK.res[id].ok, sql: (MK.ans[id] || '').slice(0, 2000) })) }); mockResult(); scrollTo(0, 0); };
   $('#hand').onclick = $('#hand2').onclick = handIn;
 }
 function mockResult(){
@@ -481,6 +530,84 @@ function mockResult(){
   app.innerHTML = `<h1 style="font-size:44px">${s} of ${MK.ids.length}</h1><p class="muted">Correct answers are counted by result. Review each question below.</p><button class="btn pri" id="new">New mock exam</button>
   ${MK.ids.map((id, n) => { const r = MK.res[id]; return `<section class="sec" style="margin-top:30px"><p class="exq"><b>${n+1}.</b> ${EX[id].q}</p><div class="verdict ${r.ok ? 'ok' : 'no'}">${r.ok ? 'Correct' : esc(r.msg)}</div>${MK.ans[id] ? `<p class="small muted">Your answer</p><pre class="code">${hl(MK.ans[id])}</pre>` : ''}${r.ok ? '' : `<p class="small muted">A correct answer</p><pre class="code">${hl(EX[id].sol)}</pre>`}</section>`; }).join('')}`;
   $('#new').onclick = () => { MK = null; mock(); };
+}
+
+/* ---------- learn from zero ---------- */
+const LSTEPS = LEARN.flatMap((u, ui) => u.steps.map((st, si) => ({ ...st, ui, si, key: ui + '.' + si })));
+function start(k){
+  let n = LSTEPS.findIndex(s => s.key === k);
+  if (n < 0) { n = LSTEPS.findIndex(s => !S.learn[s.key]); if (n < 0) n = 0; return location.replace('#/start/' + LSTEPS[n].key); }
+  const st = LSTEPS[n], u = LEARN[st.ui], doneN = LSTEPS.filter(s => S.learn[s.key]).length;
+  app.innerHTML = `<div class="lrn"><nav class="lmap" aria-label="Lessons"><div class="small muted">${doneN} of ${LSTEPS.length} steps done</div>
+    ${LEARN.map((un, ui) => `<h4>${ui + 1}. ${esc(un.title)}</h4>${un.steps.map((s2, si) => `<a href="#/start/${ui}.${si}" class="${ui + '.' + si === k ? 'on' : ''}"><span class="ck ${S.learn[ui + '.' + si] ? 'd' : ''}">${S.learn[ui + '.' + si] ? '✓' : ''}</span>${esc(s2.t)}</a>`).join('')}`).join('')}</nav>
+    <article class="lstep"><div class="unit">Lesson ${st.ui + 1}: ${esc(u.title)}, step ${st.si + 1} of ${u.steps.length}</div><h1>${esc(st.t)}</h1><div class="x">${st.x}</div>
+    ${st.ex ? `<p class="small muted" style="margin-bottom:6px">Example. Press Run, change something, run it again.</p><div id="lex"></div>` : ''}
+    <div class="yourturn"><h2>Your turn</h2>${st.task ? `<p class="exq" style="font-size:17.5px;margin:6px 0 12px">${st.task.q}</p><div id="ltask"></div><div class="cbar" style="padding:12px 0;border:0"><button class="btn gold" id="lchk">Check</button>${st.task.hint ? '<button class="btn" id="lhint">Hint</button>' : ''}<button class="btn" id="lshow">Show answer</button></div>` : `<p class="exq" style="font-size:17.5px;margin:6px 0 4px">${esc(st.mcq.q)}</p><div id="lmcq">${shuffle(st.mcq.o.map((_, j) => j)).map(j => `<button class="opt" data-j="${j}">${esc(st.mcq.o[j])}</button>`).join('')}</div>`}
+    <div id="lfb"></div></div>
+    <div class="lnav">${n > 0 ? `<a class="btn" href="#/start/${LSTEPS[n - 1].key}">Back</a>` : ''}<span style="flex:1"></span>${n < LSTEPS.length - 1 ? `<a class="btn ${S.learn[st.key] ? 'pri' : ''}" id="lnext" href="#/start/${LSTEPS[n + 1].key}">${S.learn[st.key] ? 'Next step' : 'Skip'}</a>` : `<a class="btn pri" href="#/exercises">Go to the exercises</a>`}</div></article></div>`;
+  if (st.ex) consoleBox($('#lex'), { sql: st.ex, compact: true });
+  const fb = $('#lfb');
+  const pass = msg => { const first = !S.learn[st.key]; S.learn[st.key] = 1; save(); if (first) track('learn', st.key, { ok: true }); fb.innerHTML = `<div class="verdict ok" style="margin-top:12px">${msg}</div>`; const nx = $('#lnext'); if (nx) { nx.classList.add('pri'); nx.textContent = 'Next step'; nx.focus(); } $$('.lmap a.on .ck').forEach(c => { c.classList.add('d'); c.textContent = '✓'; }); };
+  if (st.task) {
+    const c = consoleBox($('#ltask'), { sql: S.drafts['L' + st.key] || '', compact: true });
+    c.ed.el.addEventListener('input', () => { S.drafts['L' + st.key] = c.ed.get(); save(); });
+    $('#lchk').onclick = async () => {
+      if (!c.ed.get().trim()) { fb.innerHTML = '<div class="verdict no" style="margin-top:12px">Write your query in the box first.</div>'; return; }
+      const r = await check({ sol: st.task.sol, db: 'enterprise', ord: /\border\b|\bsort|first$/i.test(st.task.q) }, c.ed.get());
+      if (r.ok) pass('Correct. That is exactly the right result.');
+      else fb.innerHTML = `<div class="verdict no" style="margin-top:12px">${esc(r.msg)}</div>${r.ref ? `<p class="small muted">The result should look like this:</p><div class="console res" style="max-height:240px">${table(r.ref)}</div>` : ''}`;
+    };
+    if (st.task.hint) $('#lhint').onclick = () => { fb.innerHTML = `<div class="expl">Hint: ${st.task.hint}</div>`; };
+    $('#lshow').onclick = () => { fb.innerHTML = `<p class="small muted" style="margin-top:12px">One correct answer. Type it yourself in the box and press Check, that's how it sticks.</p><pre class="code">${hl(st.task.sol)}</pre>`; };
+  } else {
+    let done = false;
+    $$('#lmcq .opt').forEach(b => b.onclick = () => { if (done) return; const j = +b.dataset.j; if (j === st.mcq.a) { done = true; b.classList.add('ok'); pass(st.mcq.why ? 'Correct. ' + esc(st.mcq.why) : 'Correct.'); } else { b.classList.add('bad'); fb.innerHTML = '<div class="verdict no" style="margin-top:12px">Not this one. Read the explanation again and try another answer.</div>'; } });
+  }
+  startDB();
+}
+
+/* ---------- admin ---------- */
+let ADM = null;
+async function admin(){
+  if (!CFG.url) { app.innerHTML = '<h1>Admin</h1><p>Reporting isn\'t connected yet.</p>'; return; }
+  if (!ADM) {
+    app.innerHTML = `<div class="adm"><h1 style="font-size:44px">Admin</h1><form id="af" style="display:flex;gap:10px;max-width:420px;margin-top:16px"><input id="ap" type="password" placeholder="Admin password" autocomplete="current-password" style="flex:1;font:inherit;padding:8px 12px;border:1px solid var(--grid);border-radius:6px;background:var(--sheet);color:var(--ink)"><button class="btn pri">Open</button></form><p id="ae" class="small" style="color:var(--bad)"></p></div>`;
+    $('#ap').focus();
+    $('#af').onsubmit = async e => {
+      e.preventDefault(); $('#ae').textContent = 'Loading…';
+      try {
+        const r = await fetch(CFG.url + '/rest/v1/rpc/admin_data', { method: 'POST', headers: { apikey: CFG.key, Authorization: 'Bearer ' + CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: $('#ap').value }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.message || 'Wrong password');
+        ADM = j; ADM.pass = $('#ap').value; admin();
+      } catch (err) { $('#ae').textContent = err.message.includes('password') ? 'Wrong password.' : 'Could not load: ' + err.message; }
+    };
+    return;
+  }
+  const ev = ADM.events || [], st = ADM.students || [];
+  const by = {}; st.forEach(s => by[s.id] = { ...s, ev: [] }); ev.forEach(e => by[e.student_id] && by[e.student_id].ev.push(e));
+  const fmt = t => t ? new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const rows = Object.values(by).map(s => {
+    const learn = new Set(s.ev.filter(e => e.kind === 'learn').map(e => e.ref)).size;
+    const exOk = new Set(s.ev.filter(e => e.kind === 'exercise' && e.ok).map(e => e.ref)).size;
+    const exTry = s.ev.filter(e => e.kind === 'exercise').length;
+    const quiz = s.ev.filter(e => e.kind === 'quiz'), mock = s.ev.filter(e => e.kind === 'mock');
+    const best = a => a.length ? Math.max(...a.map(e => Math.round(100 * e.score / e.total))) : null;
+    const last = s.ev.length ? s.ev[0].at : s.created_at;
+    return { s, learn, exOk, exTry, quizBest: best(quiz), quizN: quiz.length, mockBest: best(mock), mockN: mock.length, mockLast: mock[0], last };
+  }).sort((a, b) => new Date(b.last) - new Date(a.last));
+  const day = Date.now() - 864e5;
+  app.innerHTML = `<div class="adm"><div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><h1 style="font-size:44px">Admin</h1><button class="btn sm" id="arf">Refresh</button></div>
+    <div class="kpis"><div>${st.length}<span>students</span></div><div>${rows.filter(r => new Date(r.last) > day).length}<span>active last 24 h</span></div><div>${ev.filter(e => e.kind === 'mock').length}<span>mock exams taken</span></div><div>${ev.filter(e => e.kind === 'exercise' && e.ok).length}<span>exercises solved</span></div></div>
+    <table class="set"><thead><tr><th>name</th><th>last active</th><th>learn steps</th><th>exercises solved</th><th>quiz best</th><th>mock best</th><th>last mock</th></tr></thead><tbody>
+    ${rows.map(r => `<tr class="link" data-id="${r.s.id}"><td class="t">${esc(r.s.name)}</td><td class="who">${fmt(r.last)}</td><td class="num">${r.learn} / ${LSTEPS.length}</td><td class="num">${r.exOk} <span class="muted">(${r.exTry} checks)</span></td><td class="num">${r.quizBest == null ? '–' : r.quizBest + '% (' + r.quizN + 'x)'}</td><td class="num">${r.mockBest == null ? '–' : r.mockBest + '% (' + r.mockN + 'x)'}</td><td class="num">${r.mockLast ? r.mockLast.score + '/' + r.mockLast.total + ' ' + fmt(r.mockLast.at) : '–'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Nobody has signed in yet. Share the site link.</td></tr>'}
+    </tbody></table><div id="adet"></div></div>`;
+  $('#arf').onclick = async () => { const p = ADM.pass; ADM = null; app.innerHTML = '<p class="loading">Refreshing…</p>'; const r = await fetch(CFG.url + '/rest/v1/rpc/admin_data', { method: 'POST', headers: { apikey: CFG.key, Authorization: 'Bearer ' + CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: p }) }); ADM = await r.json(); ADM.pass = p; admin(); };
+  $$('tr[data-id]').forEach(tr => tr.onclick = () => {
+    const s = by[tr.dataset.id], name = k => k === 'learn' ? 'Learn step' : k === 'exercise' ? 'Exercise' : k === 'quiz' ? 'Quiz' : k === 'mock' ? 'Mock exam' : k === 'join' ? 'Joined' : k;
+    const what = e => e.kind === 'exercise' ? `${EX[+e.ref] ? esc(EX[+e.ref].q.replace(/<[^>]+>/g, '').slice(0, 90)) : e.ref} <b style="color:var(${e.ok ? '--ok' : '--bad'})">${e.ok ? 'correct' : 'wrong'}</b>` : e.kind === 'learn' ? esc((LSTEPS.find(x => x.key === e.ref) || {}).t || e.ref) : e.kind === 'quiz' ? `${e.score}/${e.total} (${esc(e.ref === 'all' ? 'everything' : CHN[e.ref] || e.ref)})` : e.kind === 'mock' ? `<b>${e.score}/${e.total}</b>${(e.detail || []).map((d, n) => `<details style="margin-top:4px"><summary>Q${n + 1} ${d.ok ? '✓' : '✗'} ${EX[d.q] ? esc(EX[d.q].q.replace(/<[^>]+>/g, '').slice(0, 70)) : ''}</summary><pre class="code">${hl(d.sql || '(no answer)')}</pre></details>`).join('')}` : '';
+    $('#adet').innerHTML = `<section class="sec"><h2>${esc(s.name)}</h2><p class="sub">Joined ${fmt(s.created_at)}. ${s.ev.length} recorded actions.</p><table class="set"><tbody>${s.ev.slice(0, 300).map(e => `<tr><td class="who">${fmt(e.at)}</td><td class="w">${name(e.kind)}</td><td class="d">${what(e)}</td></tr>`).join('')}</tbody></table></section>`;
+    $('#adet').scrollIntoView({ behavior: 'smooth' });
+  });
 }
 
 /* ---------- cheat sheet ---------- */
@@ -492,10 +619,10 @@ function cheat(){
 function route(){
   const [r, a] = location.hash.replace(/^#\/?/, '').split('/');
   nav(r === 'ex' ? 'exercises' : r || '');
-  const f = { '': home, learn: () => learn(a), play, exercises: () => exercises(a), ex: () => exercise(a), quiz, mock, cheat }[r || ''] || home;
+  const f = { '': home, start: () => start(a), admin, learn: () => learn(a), play, exercises: () => exercises(a), ex: () => exercise(a), quiz, mock, cheat }[r || ''] || home;
   f(); if (r !== 'quiz' || !QS) scrollTo(0, 0);
 }
-addEventListener('hashchange', route); route();
+addEventListener('hashchange', route); route(); gate();
 setTimeout(startDB, 300);
 window.__rdb = { run, check, EX, QZ, startDB, norm };
 </script>

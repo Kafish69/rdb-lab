@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite'; import fs from 'fs'; import { execSync } from 'child_process';
 const R = '/home/claude/rdb/';
-const py = JSON.parse(execSync(`cd ${R}src && python3 -c "import json; from exercises import EX; from quiz import QZ; from cheat import CHEAT; print(json.dumps(dict(ex=EX, qz=QZ, cheat=[dict(t=t,b=b) for t,b in CHEAT])))"`).toString());
+const py = JSON.parse(execSync(`cd ${R}src && python3 -c "import json; from exercises import EX; from quiz import QZ; from cheat import CHEAT; from learn import UNITS; print(json.dumps(dict(learn=UNITS, ex=EX, qz=QZ, cheat=[dict(t=t,b=b) for t,b in CHEAT])))"`).toString());
 const seed = fs.readFileSync(R+'src/seed.sql','utf8');
 const db = new PGlite(); await db.exec(seed);
 // schema introspection
@@ -36,7 +36,10 @@ for (const n of notes) for (const m of n.html.matchAll(/data-db="(\w+)" data-sql
   try { await db.exec('BEGIN'); await db.exec(`SET search_path TO ${m[1]}; SET datestyle TO ISO, DMY;`); await db.exec(sql); } catch(e) { console.log('NOTE ERR', n.id, e.message, '|', sql.slice(0,70)); } finally { await db.exec('ROLLBACK'); }
 }
 py.ex.forEach(e => e.ord = /\b(sort|sorted|order|descending|ascending|most first|highest first|longest first|oldest first)\b|\bplaces? \d|page \d/i.test(e.q.replace(/<[^>]+>/g,'')));
-const DATA = { notes, ex: py.ex, qz: py.qz, cheat: py.cheat, schema, seed };
+// validate learn
+for (const u of py.learn) for (const st of u.steps) for (const q of [st.ex, st.task && st.task.sol].filter(Boolean)) { try { await db.exec('BEGIN'); await db.exec('SET search_path TO enterprise; SET datestyle TO ISO, DMY;'); const r = await db.exec(q); if (!r[r.length-1].rows.length) console.log('LEARN EMPTY', st.t); } catch(e) { console.log('LEARN ERR', st.t, e.message) } finally { await db.exec('ROLLBACK') } }
+const cfg = fs.existsSync(R+'src/cfg.json') ? JSON.parse(fs.readFileSync(R+'src/cfg.json','utf8')) : {};
+const DATA = { learn: py.learn, cfg, notes, ex: py.ex, qz: py.qz, cheat: py.cheat, schema, seed };
 const html = fs.readFileSync(R+'src/template.html','utf8').replace('__DATA__', () => JSON.stringify(DATA).replace(/<\/script/g,'<\\/script'));
 fs.writeFileSync(R+'site/index.html', html);
 console.log('built', (html.length/1024|0)+'KB', 'ex', py.ex.length, 'qz', py.qz.length, 'notes', notes.length, 'bad', bad);
