@@ -230,7 +230,7 @@ const app = $('#app');
 const shuffle = a => { a = [...a]; for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; };
 
 /* ---------- storage ---------- */
-const KEY = 'rdblab.v1';
+const KEY = 'rdblab.v2';
 let S = {}; try { S = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) {}
 S.done = S.done || {}; S.learn = S.learn || {}; S.drafts = S.drafts || {}; S.quiz = S.quiz || {}; S.mock = S.mock || [];
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} };
@@ -349,7 +349,7 @@ async function check(ex, userSql){
 /* ---------- nav & router ---------- */
 const TABS = [['','Home'],['start','Learn'],['learn','Notes'],['play','Playground'],['exercises','Exercises'],['quiz','Quiz'],['mock','Mock exam'],['cheat','Cheat sheet']];
 function nav(r){ $('#nav').innerHTML = TABS.map(([h, t]) => `<a href="#/${h}" class="${r === h ? 'on' : ''}">${t}</a>`).join(''); }
-const SETS = [['w2','Week 2: one table'],['w3','Week 3: functions'],['w4','Week 4: joins'],['w5','Week 5: group by and having'],['w5o','Week 5: outer joins'],['nf','Netflix database']];
+const SETS = [['select','SELECT, WHERE, ORDER BY and FETCH'],['functions','Conversions, numbers, dates and text'],['joins','Inner, non-equi and self joins'],['group','Aggregate functions, GROUP BY and HAVING'],['outer','Outer joins']];
 const exIdx = s => EX.map((e, i) => [e, i]).filter(([e]) => e.s === s);
 
 function home(){
@@ -362,8 +362,8 @@ function home(){
   <section class="sec"><h2>The course</h2><p class="sub">Six chapters and an exam guide. Every SQL block inside them runs.</p>
     <table class="set"><thead><tr><th>week</th><th>chapter</th><th class="hide-s">covers</th></tr></thead><tbody>
     ${NOTES.map(c => `<tr class="link" data-h="#/learn/${c.id}"><td class="w">${esc(c.week)}</td><td class="t">${esc(c.title)}</td><td class="d">${esc(c.covers)}</td></tr>`).join('')}</tbody></table></section>
-  <section class="sec"><h2>Practise</h2><p class="sub">${EX.length} query exercises checked against the real answer, ${QZ.length} concept questions, and a mock exam on a database you haven't seen.</p>
-    <table class="set"><thead><tr><th>set</th><th>exercises</th><th>solved</th></tr></thead><tbody>
+  <section class="sec"><h2>Practise</h2><p class="sub">Per chapter: questions on the theory and ${EX.length} query exercises checked against the right answer. Then a timed mock exam.</p>
+    <table class="set"><thead><tr><th>chapter</th><th>exercises</th><th>solved</th></tr></thead><tbody>
     ${SETS.map(([s, t]) => { const all = exIdx(s), d = all.filter(([, i]) => S.done[i]).length; return `<tr class="link" data-h="#/exercises/${s}"><td class="t">${t}</td><td class="num">${all.length}</td><td><span class="bar5"><i style="width:${100*d/all.length}%"></i></span> <span class="num">${d}</span></td></tr>`; }).join('')}
     </tbody></table>
     <p class="small muted" style="margin-top:12px">${doneN} of ${EX.length} solved on this device.</p></section>`;
@@ -392,9 +392,9 @@ function learn(id){
 function play(){
   app.innerHTML = `<div class="play"><aside class="side"><div class="row" style="display:flex;gap:8px"><button class="btn sm" id="rst">Reset database</button></div><p class="small muted" style="margin:0">Changes here are kept until you reset. Click a table to see its rows.</p><div class="schema" id="sch"></div></aside><div><div id="pc"></div></div></div>`;
   const draft = S.drafts.play || 'SELECT *\nFROM employees;';
-  const c = consoleBox($('#pc'), { sql: draft, rollback: false, dbPick: true, db: S.playdb || 'enterprise' });
+  const c = consoleBox($('#pc'), { sql: draft, rollback: false });
   const drawSchema = () => { $('#sch').innerHTML = schemaHTML(c.db(), true); $$('#sch h4[data-t]').forEach(h => h.onclick = () => { c.ed.set(`SELECT *\nFROM ${h.dataset.t};`); c.go(); }); };
-  drawSchema(); $('.dbsel').onchange = () => { S.playdb = c.db(); save(); drawSchema(); };
+  drawSchema();
   c.ed.el.addEventListener('input', () => { S.drafts.play = c.ed.get(); save(); });
   $('#rst').onclick = async () => { $('#rst').textContent = 'Resetting…'; await resetDB(); $('#rst').textContent = 'Reset database'; c.out.innerHTML = '<div class="msg okm">The database is back to its original rows.</div>'; };
   startDB();
@@ -402,8 +402,9 @@ function play(){
 
 function exercises(set){
   if (!set) {
-    app.innerHTML = `<h1 style="font-size:44px">Exercises</h1><p class="sub muted" style="max-width:640px">Write the query, press Check. Your result is compared with the answer's result: same columns, same rows, and the same order when the question asks for sorting. Column names don't have to match.</p>
-    ${SETS.map(([s, t]) => `<section class="sec" style="margin-top:34px"><h2 style="font-size:24px">${t}</h2><div class="dots" style="margin-top:10px">${exIdx(s).map(([e, i], k) => `<a class="dot ${S.done[i] ? 'done' : ''}" href="#/ex/${i}" title="${esc(e.q.replace(/<[^>]+>/g, ''))}">${k+1}</a>`).join('')}</div></section>`).join('')}`;
+    app.innerHTML = `<h1 style="font-size:44px">Exercises</h1><p class="sub muted" style="max-width:640px">Every chapter of the notes has questions and query exercises. For the exercises: write the query, press Check. Your result is compared with the answer's result: same columns, same rows, and the same order when the question asks for sorting. Column names don't have to match.</p>
+    <section class="sec" style="margin-top:34px"><h2 style="font-size:24px">Databases, keys and data models</h2><p class="small muted" style="margin:6px 0 10px">Theory only: answer the questions.</p><a class="btn sm" href="#/quiz/intro">${QZ.filter(q => q.c === 'intro').length} questions</a></section>
+    ${SETS.map(([s, t]) => `<section class="sec" style="margin-top:34px"><h2 style="font-size:24px">${t}</h2><p class="small muted" style="margin:6px 0 10px">First the questions, then write the queries. <a href="#/learn/${s}">Read the chapter</a></p><a class="btn sm" href="#/quiz/${s}">${QZ.filter(q => q.c === s).length} questions</a><div class="dots" style="margin-top:12px">${exIdx(s).map(([e, i], k) => `<a class="dot ${S.done[i] ? 'done' : ''}" href="#/ex/${i}" title="${esc(e.q.replace(/<[^>]+>/g, ''))}">${k+1}</a>`).join('')}</div></section>`).join('')}`;
     return;
   }
   const first = exIdx(set).find(([, i]) => !S.done[i]) || exIdx(set)[0];
@@ -441,7 +442,8 @@ function exercise(i){
 /* ---------- quiz ---------- */
 const CHN = Object.fromEntries(NOTES.map(n => [n.id, n.title]));
 let QS = null;
-function quiz(){
+function quiz(cat){
+  if (cat) { S.qcat = cat; save(); QS = null; history.replaceState(null, '', '#/quiz'); const pool = QZ.filter(q => q.c === cat); QS = { cat, qs: shuffle(pool).slice(0, 30).map(q => ({ ...q, ord: shuffle(q.o.map((_, j) => j)) })), i: 0, ok: 0 }; }
   const cats = [...new Set(QZ.map(q => q.c))];
   const pick = S.qcat || 'all';
   if (!QS) {
@@ -474,12 +476,11 @@ function quiz(){
 /* ---------- mock exam ---------- */
 let MK = null;
 function mock(){
-  const pool = exIdx('nf').map(([, i]) => i);
+  const pool = EX.map((_, i) => i).filter(i => /JOIN|GROUP|HAVING|TO_CHAR|age\(|LIKE|FETCH|IS NULL/i.test(EX[i].sol));
   if (!MK) {
     app.innerHTML = `<h1 style="font-size:44px">Mock exam</h1>
-    <p style="max-width:660px">Like the real exam: a database you haven't practised on and open questions. Write each query first on paper, then type it here. Nothing is checked until you hand in.</p>
-    <div class="schema">${schemaHTML('netflix')}</div>
-    <p class="small muted" style="max-width:660px">A view_summary row is about a movie <i>or</i> a season. A lower view_rank is better. release_date and runtime can be empty.</p>
+    <p style="max-width:660px">Open questions from every chapter, picked at random. Write each query first on paper, then type it here. Nothing is checked until you hand in.</p>
+    <div class="schema">${schemaHTML('enterprise')}</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px"><button class="btn pri" data-n="8">8 questions, 40 minutes</button><button class="btn" data-n="12">12 questions, 60 minutes</button></div>
     ${S.mock.length ? `<p class="small muted" style="margin-top:20px">Earlier attempts: ${S.mock.slice(-5).map(m => `${m.s}/${m.n}`).join(', ')}</p>` : ''}`;
     $$('[data-n]').forEach(b => b.onclick = () => { const n = +b.dataset.n; MK = { ids: shuffle(pool).slice(0, n), ans: {}, end: Date.now() + n * 5 * 60000, done: false }; mock(); });
@@ -489,7 +490,7 @@ function mock(){
   app.innerHTML = `<div style="display:flex;align-items:center;gap:14px;position:sticky;top:56px;background:var(--paper);padding:10px 0;z-index:5;border-bottom:1px solid var(--grid)"><b>Mock exam</b><span class="num" id="clock"></span><span style="flex:1"></span><button class="btn gold" id="hand">Hand in</button></div>
     ${MK.ids.map((id, n) => `<section class="sec" style="margin-top:30px"><p class="exq"><b>${n+1}.</b> ${EX[id].q}</p><div class="mk" data-id="${id}"></div></section>`).join('')}
     <p style="margin-top:30px"><button class="btn gold" id="hand2">Hand in</button></p>`;
-  $$('.mk').forEach(b => { const id = b.dataset.id; const c = consoleBox(b, { sql: MK.ans[id] || '', db: 'netflix' }); c.ed.el.addEventListener('input', () => { MK.ans[id] = c.ed.get(); }); });
+  $$('.mk').forEach(b => { const id = b.dataset.id; const c = consoleBox(b, { sql: MK.ans[id] || '' }); c.ed.el.addEventListener('input', () => { MK.ans[id] = c.ed.get(); }); });
   const tick = () => { const left = Math.max(0, MK.end - Date.now()); const el = $('#clock'); if (!el) return clearInterval(tm); el.textContent = `${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')} left`; if (!left) { clearInterval(tm); handIn(); } };
   const tm = setInterval(tick, 1000); tick();
   const handIn = async () => { clearInterval(tm); app.insertAdjacentHTML('afterbegin', '<div class="verdict">Checking your answers…</div>'); MK.res = {}; for (const id of MK.ids) MK.res[id] = MK.ans[id] && MK.ans[id].trim() ? await check(EX[id], MK.ans[id]) : { ok: false, msg: 'No answer.' }; MK.done = true; const s = Object.values(MK.res).filter(r => r.ok).length; S.mock.push({ s, n: MK.ids.length, t: Date.now() }); save(); mockResult(); scrollTo(0, 0); };
@@ -545,8 +546,8 @@ function cheat(){
 function route(){
   const [r, a] = location.hash.replace(/^#\/?/, '').split('/');
   nav(r === 'ex' ? 'exercises' : r || '');
-  const f = { '': home, start: () => start(a), learn: () => learn(a), play, exercises: () => exercises(a), ex: () => exercise(a), quiz, mock, cheat }[r || ''] || home;
-  f(); if (r !== 'quiz' || !QS) scrollTo(0, 0);
+  const f = { '': home, quiz: () => quiz(a), start: () => start(a), learn: () => learn(a), play, exercises: () => exercises(a), ex: () => exercise(a), mock, cheat }[r || ''] || home;
+  f(); scrollTo(0, 0);
 }
 addEventListener('hashchange', route); route();
 setTimeout(startDB, 300);

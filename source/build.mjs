@@ -5,7 +5,7 @@ const seed = fs.readFileSync(R+'src/seed.sql','utf8');
 const db = new PGlite(); await db.exec(seed);
 // schema introspection
 const schema = {};
-for (const s of ['enterprise','netflix']) {
+for (const s of ['enterprise']) {
   const tabs = (await db.query(`SELECT table_name FROM information_schema.tables WHERE table_schema=$1 ORDER BY CASE table_name WHEN 'employees' THEN 1 WHEN 'departments' THEN 2 WHEN 'locations' THEN 3 WHEN 'projects' THEN 4 WHEN 'tasks' THEN 5 WHEN 'family_members' THEN 6 WHEN 'tv_show' THEN 1 WHEN 'season' THEN 2 WHEN 'movie' THEN 3 ELSE 4 END`, [s])).rows;
   schema[s] = [];
   for (const {table_name: t} of tabs) {
@@ -21,7 +21,7 @@ let bad = 0;
 for (const [i,e] of py.ex.entries()) { try { await db.exec('BEGIN'); await db.exec(`SET search_path TO ${e.db}; SET datestyle TO ISO, DMY;`); const r = await db.exec(e.sol,{rowMode:'array',parsers:P}); if (!r[r.length-1].rows.length) { console.log('EMPTY', i); } } catch(err) { bad++; console.log('ERR', i, err.message) } finally { await db.exec('ROLLBACK') } }
 // notes
 const md = fs.readFileSync(R+'src/notes.md','utf8');
-const COVERS = { intro:'DB vs DBMS, keys, integrity rules, data models, SQL groups', select:'SELECT, DISTINCT, WHERE, LIKE, IN, NULL, ORDER BY, OFFSET/FETCH', functions:'TO_CHAR, TO_DATE, CAST, ROUND, dates, text functions', joins:'INNER JOIN, USING, NATURAL, non-equi and self joins', group:'COUNT, SUM, AVG, MIN, MAX, GROUP BY, HAVING', outer:'LEFT, RIGHT, FULL joins and finding what is missing', exam:'Exam approach, common mistakes, the Netflix database' };
+const COVERS = { intro:'DB vs DBMS, keys, integrity rules, data models, SQL groups', select:'SELECT, DISTINCT, WHERE, LIKE, IN, NULL, ORDER BY, OFFSET/FETCH', functions:'TO_CHAR, TO_DATE, CAST, ROUND, dates, text functions', joins:'INNER JOIN, USING, NATURAL, non-equi and self joins', group:'COUNT, SUM, AVG, MIN, MAX, GROUP BY, HAVING', outer:'LEFT, RIGHT, FULL joins and finding what is missing', exam:'How to attack a question, the mistakes that cost points' };
 const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const notes = md.split(/^@@ch /m).filter(Boolean).map(part => {
   const [head, ...rest] = part.split('\n'); const [cid, title, week] = head.split('|').map(s => s.trim());

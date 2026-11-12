@@ -61,7 +61,7 @@
 <li><b>Many-to-many</b> can't be stored directly. You add an <b>intermediate entity</b> whose PK is the combination of the two FKs. In the shop: <code>Order(customer_id, product_id, …)</code>. In enterprise: <code>tasks(employee_id, project_id, hours)</code>.</li>
 <li><b>Recursive relationship</b>: an entity related to itself. <code>employees.manager_id</code> refers to <code>employees.employee_id</code>. The CEO has <code>manager_id</code> = NULL.</li>
 </ul>
-<div class="trap"><p>Exam favourite: "every member must have an email and no two members can share it" → <b>&lt;&lt;NN&gt;&gt; &lt;&lt;UQ&gt;&gt;</b>. Mandatory → NN. Can't repeat → UQ. Both → both tags. It does <b>not</b> become the PK.</p></div>
+<div class="trap"><p>"Every customer must have an email and no two customers can share one" → <b>&lt;&lt;NN&gt;&gt; &lt;&lt;UQ&gt;&gt;</b>. Mandatory → NN. Can't repeat → UQ. Both → both tags. It does <b>not</b> become the PK.</p></div>
 <p><b>Logical</b> data model: what do we store and how is it related? <b>Physical</b> data model: how do we build it in a specific DBMS (tables, columns, data types such as <code>INT</code>, <code>VARCHAR(100)</code>, <code>DATE</code>, constraints, indexes).</p>
 
 ## The enterprise database
@@ -568,7 +568,7 @@ ORDER BY d.department_id;
 <p class="small">Changes made by a Run button here are rolled back right away, so the database stays clean.</p>
 
 @@ch exam | Exam guide | Recap
-<p class="lead">The exam gives you a <b>new database</b> and <b>open questions</b>: you write the SQL yourself, without IDE. Practise on paper first, then check it here.</p>
+<p class="lead">On the exam you get a database and <b>open questions</b>: you write the SQL yourself, without IDE. Practise on paper first, then check it here.</p>
 
 ## How to attack every question
 <ol>
@@ -593,14 +593,4 @@ ORDER BY d.department_id;
 <li>FETCH without ORDER BY; ONLY where WITH TIES was asked ("the employee(s) with the lowest salary").</li>
 <li><code>||</code> with a NULL column wipes the whole text.</li>
 <li>BETWEEN with the high value first.</li>
-</ul>
-
-## Practice database for the mock exam
-<p>The mock exam uses a second database, <b>netflix</b>: movies, TV shows, seasons and view statistics (sample data).</p>
-<div class="schema" data-db="netflix"></div>
-<ul>
-<li>A tv_show has many seasons (<code>season.tv_show_id</code>).</li>
-<li>A view_summary row belongs to a movie (<code>movie_id</code>) <b>or</b> a season (<code>season_id</code>). The other one is NULL.</li>
-<li>Lower <code>view_rank</code> is better (1 = top). <code>duration</code> is WEEKLY or SEMI_ANNUALLY.</li>
-<li><code>release_date</code> and <code>runtime</code> can be NULL. <code>created_date</code> is when the record was added, not the release date.</li>
 </ul>
